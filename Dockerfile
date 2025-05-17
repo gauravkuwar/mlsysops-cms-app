@@ -1,22 +1,25 @@
-# Use an official Python runtime as a parent image
+# Use an official slim Python image
 FROM python:3.11-slim-buster
 
-# Set the working directory to /app
+# Set working directory
 WORKDIR /app
 
-# Copy the requirements.txt into the container at /app
-# we do this separately so that the "expensive" build step (pip install)
-# does not need to be repeated if other files in /app change.
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file
 COPY requirements.txt /app
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --trusted-host pypi.python.org -r requirements.txt
+# Install Python packages (with PyTorch CPU wheels)
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
-# Copy the current directory contents into the container at /app
+# Copy the full app
 COPY . /app
 
-# Expose the port on which the app will run
+# Expose Flask port
 EXPOSE 8000
 
-# Run the command to start the Flask server
-CMD ["python","app.py"]
+# Start the Flask app
+CMD ["python", "app.py"]

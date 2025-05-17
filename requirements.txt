@@ -1,7 +1,7 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
 Flask
 numpy
 Pillow
 torch==2.6.0+cpu
 torchvision==0.21.0
+transformers
+scikit-learn

@@ -1,59 +1,40 @@
-import numpy as np
-from PIL import Image
-import torchvision.transforms as transforms
 import torch
-from flask import Flask, redirect, url_for, request, render_template
-from werkzeug.utils import secure_filename
-import os
+from flask import Flask, request, render_template, jsonify
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, BertConfig
 
 app = Flask(__name__)
 
-os.makedirs(os.path.join(app.instance_path, 'uploads'), exist_ok=True)
+# Config
+mock_config = {
+    "max_len": 128,
+    "model_name": "google/bert_uncased_L-2_H-128_A-2"
+}
 
-model = torch.load("food11.pth", map_location=torch.device("cpu"), weights_only=False)
+tokenizer = AutoTokenizer.from_pretrained(mock_config["model_name"])
+config = BertConfig.from_pretrained(mock_config["model_name"], num_labels=1)
+model = AutoModelForSequenceClassification.from_config(config)
+state_dict = torch.load("model.pth", map_location="cpu")
+model.load_state_dict(state_dict)
+model.eval()
 
-def preprocess_image(img):
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-    return transform(img).unsqueeze(0)
-
-def model_predict(img_path, model):
-    img = Image.open(img_path).convert('RGB')
-    img = preprocess_image(img)
-
-    classes = np.array(["Bread", "Dairy product", "Dessert", "Egg", "Fried food",
-	"Meat", "Noodles/Pasta", "Rice", "Seafood", "Soup",
-	"Vegetable/Fruit"])
-
+def model_predict(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=mock_config["max_len"])
     with torch.no_grad():
-        output = model(img)
-        prob, predicted_class = torch.max(output, 1)
-    
-    return classes[predicted_class.item()], torch.sigmoid(prob).item()
+        logits = model(**inputs).logits.squeeze().item()
+        prob = torch.sigmoid(torch.tensor(logits)).item()
+    label = "Non-Toxic" if prob < 0.5 else "Toxic"
+    return label, prob
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/predict', methods=['GET', 'POST'])
-def upload():
-    preds = None
-    if request.method == 'POST':
-        # Get the file from post request
-        f = request.files['file']
-        f.save(os.path.join(app.instance_path, 'uploads', secure_filename(f.filename)))
-        preds, probs = model_predict("./instance/uploads/" + secure_filename(f.filename), model)
-        return '<button type="button" class="btn btn-info btn-sm">' + str(preds) + '</button>' 
-    return '<a href="#" class="badge badge-warning">Warning</a>'
-
-@app.route('/test', methods=['GET'])
-def test():
-    preds, probs = model_predict("./instance/uploads/test_image.jpeg", model)
-    return str(preds)
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.get_json()
+    text = data.get("text", "")
+    label, score = model_predict(text)
+    return jsonify({"label": label, "confidence": round(score, 2)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)

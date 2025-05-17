@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 import torch
 import mlflow.pyfunc
 from flask import Flask, request, render_template, jsonify
@@ -14,18 +16,38 @@ mock_config = {
 }
 
 MODEL_NAME = "mlsysops-cms-model"
-MODEL_STAGE = os.environ.get("MODEL_STAGE", "Staging")  # e.g., Staging, Prod, Canary
+MODEL_STAGE = os.environ.get("MODEL_STAGE", "Staging")
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(mock_config["model_name"])
 
-# Load model from MLflow
+# Load model once at startup
 client = MlflowClient()
 version_info = client.get_model_version_by_alias(MODEL_NAME, MODEL_STAGE.lower())
 model_uri = f"models:/{MODEL_NAME}/{version_info.version}"
 model = mlflow.pytorch.load_model(model_uri)
 model.eval()
 
+# Version tracking
+current_version = version_info.version
+latest_version = current_version
+
+# Polling thread
+def poll_model_version():
+    global latest_version
+    while True:
+        try:
+            version_info = client.get_model_version_by_alias(MODEL_NAME, MODEL_STAGE.lower())
+            if version_info.version != latest_version:
+                latest_version = version_info.version
+                print(f"[Model Update Detected] New version available: {latest_version} (current loaded: {current_version})")
+        except Exception as e:
+            print(f"[Polling Error] {e}")
+        time.sleep(30)
+
+threading.Thread(target=poll_model_version, daemon=True).start()
+
+# Prediction logic
 def model_predict(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=mock_config["max_len"])
     with torch.no_grad():

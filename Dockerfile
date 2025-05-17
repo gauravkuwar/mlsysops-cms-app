@@ -7,11 +7,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages in two passes to avoid resolution spikes
+# Install dependencies
 RUN pip install --no-cache-dir \
-    torch==2.6.0+cpu \
-    --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir \
+    torch==2.5.1 \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN pip install --no-cache-dir \
     mlflow \
     transformers \
     scikit-learn \

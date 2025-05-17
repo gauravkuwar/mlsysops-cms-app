@@ -1,7 +1,5 @@
 Flask
-numpy
-Pillow
 torch==2.6.0+cpu
-torchvision==0.21.0
 transformers
+mlflow
 scikit-learn

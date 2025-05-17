@@ -1,6 +1,9 @@
+import os
 import torch
+import mlflow.pyfunc
 from flask import Flask, request, render_template, jsonify
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, BertConfig
+from transformers import AutoTokenizer
+from mlflow.tracking import MlflowClient
 
 app = Flask(__name__)
 
@@ -10,11 +13,17 @@ mock_config = {
     "model_name": "google/bert_uncased_L-2_H-128_A-2"
 }
 
+MODEL_NAME = "mlsysops-cms-model"
+MODEL_STAGE = os.environ.get("MODEL_STAGE", "Staging")  # e.g., Staging, Prod, Canary
+
+# Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(mock_config["model_name"])
-config = BertConfig.from_pretrained(mock_config["model_name"], num_labels=1)
-model = AutoModelForSequenceClassification.from_config(config)
-state_dict = torch.load("model.pth", map_location="cpu")
-model.load_state_dict(state_dict)
+
+# Load model from MLflow
+client = MlflowClient()
+version_info = client.get_model_version_by_alias(MODEL_NAME, MODEL_STAGE.lower())
+model_uri = f"models:/{MODEL_NAME}/{version_info.version}"
+model = mlflow.pytorch.load_model(model_uri)
 model.eval()
 
 def model_predict(text):

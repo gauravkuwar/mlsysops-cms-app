@@ -1,5 +1,0 @@
-Flask
-torch==2.6.0+cpu
-transformers
-mlflow
-scikit-learn

@@ -1,29 +1,26 @@
 # Use an official slim Python image
 FROM python:3.11-slim-buster
 
-# Set working directory early
+# Set working directory
 WORKDIR /app
 
-# Install only needed system packages
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git \
-        curl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy only requirements first for layer caching
-COPY requirements.txt .
+# Copy requirements
+COPY requirements.txt /app
 
-# Use --prefer-binary to avoid building wheels
-RUN pip install --no-cache-dir --prefer-binary \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    -r requirements.txt
+# Install Python packages (PyTorch + MLflow + Transformers)
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
-# Now copy the rest of the app
-COPY . .
+# Copy application code
+COPY . /app
 
 # Expose Flask port
 EXPOSE 8000
 
-# Run app
+# Run the Flask app
 CMD ["python", "app.py"]

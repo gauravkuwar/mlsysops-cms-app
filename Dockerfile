@@ -9,6 +9,7 @@ RUN apt-get update && \
 
 # Install Python dependencies
 RUN pip install --no-cache-dir \
+    onnx \
     onnxruntime \
     numpy \
     mlflow \

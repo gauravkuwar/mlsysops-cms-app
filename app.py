@@ -1,8 +1,9 @@
 import os
 import time
 import threading
-import torch
-import mlflow.pyfunc
+import numpy as np
+import mlflow
+import onnxruntime as ort
 from flask import Flask, request, render_template, jsonify
 from transformers import AutoTokenizer
 from mlflow.tracking import MlflowClient
@@ -26,9 +27,9 @@ client = MlflowClient()
 def load_model_from_stage():
     version_info = client.get_model_version_by_alias(MODEL_NAME, MODEL_STAGE.lower())
     model_uri = f"models:/{MODEL_NAME}/{version_info.version}"
-    model = mlflow.pytorch.load_model(model_uri)
-    model.eval()
-    return model, version_info.version
+    model_path = mlflow.onnx.load_model(model_uri)
+    session = ort.InferenceSession(model_path.SerializeToString())
+    return session, version_info.version
 
 model, current_version = load_model_from_stage()
 latest_version = current_version
@@ -52,10 +53,11 @@ threading.Thread(target=poll_model_version, daemon=True).start()
 
 # Prediction
 def model_predict(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=mock_config["max_len"])
-    with torch.no_grad():
-        logits = model(**inputs).logits.squeeze().item()
-        prob = torch.sigmoid(torch.tensor(logits)).item()
+    inputs = tokenizer(text, return_tensors="np", truncation=True, padding=True, max_length=mock_config["max_len"])
+    ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items()}
+    outputs = model.run(None, ort_inputs)[0]
+    logits = outputs.squeeze().item()
+    prob = 1 / (1 + np.exp(-logits))
     label = "Non-Toxic" if prob < 0.5 else "Toxic"
     return label, prob
 
@@ -70,7 +72,6 @@ def predict():
     label, score = model_predict(text)
     return jsonify({"label": label, "confidence": round(score, 2)})
 
-# (Optional for next step)
 @app.route('/healthz', methods=['GET'])
 def health():
     return jsonify({"model_version": current_version})

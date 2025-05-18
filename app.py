@@ -53,8 +53,22 @@ threading.Thread(target=poll_model_version, daemon=True).start()
 
 # Prediction
 def model_predict(text):
-    inputs = tokenizer(text, return_tensors="np", truncation=True, padding=True, max_length=mock_config["max_len"])
-    ort_inputs = {k: v.astype(np.int64) for k, v in inputs.items()}
+    inputs = tokenizer(
+    text,
+    return_tensors="np",
+    truncation=True,
+    padding=True,
+    max_length=mock_config["max_len"]
+)
+
+    # Only keep inputs the ONNX model actually expects
+    expected_inputs = {i.name for i in model.get_inputs()}
+    ort_inputs = {
+        k: v.astype(np.int64)
+        for k, v in inputs.items()
+        if k in expected_inputs
+    }
+    
     outputs = model.run(None, ort_inputs)[0]
     logits = outputs.squeeze().item()
     prob = 1 / (1 + np.exp(-logits))
